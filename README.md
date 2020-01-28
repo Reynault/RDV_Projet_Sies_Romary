@@ -7,7 +7,7 @@
 ## compilation
 ```sh
 git clone https://github.com/Reynault/RDV_Projet_Sies_Romary.git
-cd puissance_4_et_MCTS
+cd RDV_Projet_Sies_Romary
 mkdir build
 cd build
 cmake ..
