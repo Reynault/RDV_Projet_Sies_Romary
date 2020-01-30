@@ -1,7 +1,7 @@
 # RDV
 
 ## Programmeurs
- - Renault Sies
+ - Reynault Sies
  - Julien Romary
 
 ## compilation
