@@ -19,7 +19,7 @@ void render(){
 
     // writing a ppm image, code from: https://github.com/ssloy/tinyraytracer
     std::ofstream ofs;
-    ofs.open("./out.ppm", std::ios::binary);
+    ofs.open("./out1.ppm", std::ios::binary);
     ofs << "P6\n" << width << " " << height << "\n255\n";
     for(size_t i = 0; i < height*width; i++){
         Vec3f &c = framebuffer[i];
@@ -33,6 +33,6 @@ void render(){
 }
 
 int main() {
-    std::cout << "Rendering image" << std::endl;
+    std::cout << "Rendering images" << std::endl;
     render();
 }
