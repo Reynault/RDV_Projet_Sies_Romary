@@ -5,6 +5,10 @@
 #include <algorithm>
 #include "model.h"
 
+/*
+ * @author ssloy, https://github.com/ssloy
+ */
+
 Model::Model(const char *filename) : verts(), faces(), norms(), texcoords() {
     std::ifstream in;
     in.open (filename, std::ifstream::in);

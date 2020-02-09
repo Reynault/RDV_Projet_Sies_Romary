@@ -3,7 +3,11 @@
 
 #include <vector>
 #include <string>
-#include <tinyrenderer/geometry.h>
+#include "geometry.h"
+
+/*
+ * @author ssloy, https://github.com/ssloy
+ */
 
 class Model {
 private:
