@@ -57,15 +57,6 @@ void drawPolygonMesh(Vec3f points[], int nbLines, std::vector<Vec3f> &framebuffe
     }
 }
 
-
-float computeTriangleAire(Vec3f points[]){
-    return (
-        (points[0].x * std::abs(points[1].y - points[2].y)) +
-        (points[1].x * std::abs(points[0].y - points[2].y)) +
-        (points[2].x * std::abs(points[0].y - points[1].y))
-    )/2.0f;
-}
-
 /*
  * drawing a triangle using line sweeping algorithm (first approach)
  */
@@ -142,6 +133,59 @@ void sweepingTriangle(Vec3f points[], std::vector<float> &zBuffer,
 
 }
 
+/*
+ * drawing a triangle using barycentric coordinates  algorithm (using bounding box)
+ */
+void rasterizeTriangle(Vec3f points[], std::vector<float> &zBuffer,
+                      std::vector<Vec3f> &framebuffer, int width, int height, Vec3f color){
+    Vec3f A, B, C, P, AB, AC, PA, vecX, vecY, coor;
+    int minX, maxX, minY, maxY;
+
+    A = points[0];
+    B = points[1];
+    C = points[2];
+
+    AB = Vec3f(
+        B.x - A.x,
+        B.y - A.y,
+        B.z - A.z
+    );
+    AC = Vec3f(
+            C.x - A.x,
+            C.y - A.y,
+            C.z - A.z
+    );
+
+    // finding bounding box
+    minX = std::min(A.x, std::min(B.x, C.x));
+    maxX = std::max(A.x, std::max(B.x, C.x));
+    minY = std::min(A.y, std::min(B.y, C.y));
+    maxY = std::max(A.y, std::max(B.y, C.y));
+
+    // iterating on bounding box
+    for(int x = minX; x <= maxX; x++){
+        for(int y = minY; y <= maxY; y++){
+            P = Vec3f(x, y, 1);
+            PA = Vec3f(
+                    A.x - P.x,
+                    A.y - P.y,
+                    A.z - P.z
+            );
+
+            // computing barycentric coordinates
+            vecX = Vec3f(AB.x, AC.x, PA.x);
+            vecY = Vec3f(AB.y, AC.y, PA.y);
+            coor = cross(vecX, vecY);
+
+            // checking if inside triangle
+            if( (1.f - (coor.x + coor.y)/coor.z) >= 0 && (coor.x / coor.z) >= 0
+            && (coor.y / coor.z) >= 0 && std::abs(coor.z)>=1){
+                framebuffer[y*width + x] = color;
+            }
+        }
+    }
+}
+
 bool updateZBuffer(float x, float y, Vec3f points[], std::vector<float> &zBuffer,
         std::vector<Vec3f> &framebuffer, int width, int height){
     bool res = false;
@@ -157,7 +201,7 @@ bool updateZBuffer(float x, float y, Vec3f points[], std::vector<float> &zBuffer
  */
 void writeInFile(std::vector<Vec3f> &framebuffer, int width, int height){
     std::ofstream ofs;
-    ofs.open("../images/out4.ppm", std::ios::binary);
+    ofs.open("../images/out5.ppm", std::ios::binary);
     ofs << "P6\n" << width << " " << height << "\n255\n";
     for(size_t i = 0; i < height*width; i++){
         Vec3f &c = framebuffer[i];
@@ -192,16 +236,20 @@ void render(){
             point.y = height - ((point.y+1) * height)/2;
             points[j] = point;
         }
-        sweepingTriangle(points, zBuffer, framebuffer, width, height, WHITE);
+        rasterizeTriangle(points, zBuffer, framebuffer, width, height, WHITE);
     }
 
-    Vec3f t1[] = {Vec3f(10,70,10), Vec3f(50,160,10), Vec3f(70,80,20)};
-    Vec3f t2[]  = {Vec3f(180,50,15), Vec3f(150,1,15), Vec3f(70,180,15)};
-    Vec3f t3[]  = {Vec3f(180,150,0), Vec3f(120,160,0), Vec3f(130,180,60)};
-
-    sweepingTriangle(t1, zBuffer, framebuffer, width, height, RED);
-    sweepingTriangle(t2, zBuffer, framebuffer, width, height, GREEN);
-    sweepingTriangle(t3, zBuffer, framebuffer, width, height, BLUE);
+//    Vec3f t1[] = {Vec3f(10,70,10), Vec3f(50,160,10), Vec3f(70,80,20)};
+//    Vec3f t2[]  = {Vec3f(180,50,15), Vec3f(150,1,15), Vec3f(70,180,15)};
+//    Vec3f t3[]  = {Vec3f(180,150,0), Vec3f(120,160,0), Vec3f(130,180,60)};
+//
+//    sweepingTriangle(t1, zBuffer, framebuffer, width, height, GREEN);
+//    sweepingTriangle(t2, zBuffer, framebuffer, width, height, GREEN);
+//    sweepingTriangle(t3, zBuffer, framebuffer, width, height, GREEN);
+//
+//    rasterizeTriangle(t1, zBuffer, framebuffer, width, height, RED);
+//    rasterizeTriangle(t2, zBuffer, framebuffer, width, height, RED);
+//    rasterizeTriangle(t3, zBuffer, framebuffer, width, height, RED);
 
     // generating file
     writeInFile(framebuffer, width, height);
