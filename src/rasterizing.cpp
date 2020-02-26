@@ -133,12 +133,41 @@ void sweepingTriangle(Vec3f points[], std::vector<float> &zBuffer,
 
 }
 
+Vec3f getBarycentricCoordinates(Vec3f AB, Vec3f AC, Vec3f PA){
+    Vec3f vecX, vecY, coor;
+    vecX = Vec3f(AB.x, AC.x, PA.x);
+    vecY = Vec3f(AB.y, AC.y, PA.y);
+    coor = cross(vecX, vecY);
+    return Vec3f((coor.x / coor.z), (coor.y / coor.z), (1.f - (coor.x + coor.y)/coor.z));
+}
+
+/*
+ * method that will update the z-buffer by comparing the current value of z
+ * with the stocked one.
+ *
+ * if it is updated, it returns true.
+ */
+bool updateZBuffer(int x, int y, Vec3f points[], Vec3f barycenter, std::vector<float> &zBuffer, int width, int height){
+    bool res = false;
+    float z;
+    if(inRange(x, y, width, height)){
+        // bi-linear interpolation to retrieve Z
+        z = points[0].z * barycenter.x + points[1].z * barycenter.y + points[2].z * barycenter.z;
+        // checking if z in z-buffer is <
+        if(z > zBuffer[y*width + x]){
+            zBuffer[y*width + x] = z;
+            res = true;
+        }
+    }
+    return res;
+}
+
 /*
  * drawing a triangle using barycentric coordinates  algorithm (using bounding box)
  */
 void rasterizeTriangle(Vec3f points[], std::vector<float> &zBuffer,
                       std::vector<Vec3f> &framebuffer, int width, int height, Vec3f color){
-    Vec3f A, B, C, P, AB, AC, PA, vecX, vecY, coor;
+    Vec3f A, B, C, P, AB, AC, PA, barycenter;
     int minX, maxX, minY, maxY;
 
     A = points[0];
@@ -171,29 +200,15 @@ void rasterizeTriangle(Vec3f points[], std::vector<float> &zBuffer,
                     A.y - P.y,
                     A.z - P.z
             );
+            barycenter = getBarycentricCoordinates(AB, AC, PA);
 
-            // computing barycentric coordinates
-            vecX = Vec3f(AB.x, AC.x, PA.x);
-            vecY = Vec3f(AB.y, AC.y, PA.y);
-            coor = cross(vecX, vecY);
-
-            // checking if inside triangle
-            if( (1.f - (coor.x + coor.y)/coor.z) >= 0 && (coor.x / coor.z) >= 0
-            && (coor.y / coor.z) >= 0 && std::abs(coor.z)>=1){
+            // checking if inside triangle and update z-buffer
+            if(barycenter.x >= 0 && barycenter.y >= 0 && barycenter.z >= 0 &&
+            updateZBuffer(x, y, points, barycenter, zBuffer, width, height)){
                 framebuffer[y*width + x] = color;
             }
         }
     }
-}
-
-bool updateZBuffer(float x, float y, Vec3f points[], std::vector<float> &zBuffer,
-        std::vector<Vec3f> &framebuffer, int width, int height){
-    bool res = false;
-    if(inRange(x, y, width, height)){
-        // bi-linear interpolation to retrieve Z
-        // checking if z in z-buffer is <
-    }
-    return res;
 }
 
 /*
@@ -201,7 +216,7 @@ bool updateZBuffer(float x, float y, Vec3f points[], std::vector<float> &zBuffer
  */
 void writeInFile(std::vector<Vec3f> &framebuffer, int width, int height){
     std::ofstream ofs;
-    ofs.open("../images/out5.ppm", std::ios::binary);
+    ofs.open("../images/out6.ppm", std::ios::binary);
     ofs << "P6\n" << width << " " << height << "\n255\n";
     for(size_t i = 0; i < height*width; i++){
         Vec3f &c = framebuffer[i];
@@ -221,6 +236,8 @@ void render(){
     Model diablo = Model("../res/diablo3_pose.obj");
     std::vector<Vec3f> framebuffer(width*height);
     std::vector<float> zBuffer(width*height);
+    std::fill(zBuffer.begin(), zBuffer.end(), std::numeric_limits<float>::lowest());
+
     Vec3f camera = Vec3f(0, 0, 0);
     Vec3f orient = Vec3f(0, 0, 0);
 
@@ -232,24 +249,15 @@ void render(){
     for(int i = 0; i < diablo.nfaces(); i++){   // fetching diablo's mesh
         for(int j = 0; j < nbPoints; j++){
             point = diablo.point(diablo.vert(i, j));
-            point.x = width - ((point.x+1) * width)/2;
+            point.x = ((point.x+1) * width)/2;
             point.y = height - ((point.y+1) * height)/2;
             points[j] = point;
         }
-        rasterizeTriangle(points, zBuffer, framebuffer, width, height, WHITE);
-    }
 
-//    Vec3f t1[] = {Vec3f(10,70,10), Vec3f(50,160,10), Vec3f(70,80,20)};
-//    Vec3f t2[]  = {Vec3f(180,50,15), Vec3f(150,1,15), Vec3f(70,180,15)};
-//    Vec3f t3[]  = {Vec3f(180,150,0), Vec3f(120,160,0), Vec3f(130,180,60)};
-//
-//    sweepingTriangle(t1, zBuffer, framebuffer, width, height, GREEN);
-//    sweepingTriangle(t2, zBuffer, framebuffer, width, height, GREEN);
-//    sweepingTriangle(t3, zBuffer, framebuffer, width, height, GREEN);
-//
-//    rasterizeTriangle(t1, zBuffer, framebuffer, width, height, RED);
-//    rasterizeTriangle(t2, zBuffer, framebuffer, width, height, RED);
-//    rasterizeTriangle(t3, zBuffer, framebuffer, width, height, RED);
+        rasterizeTriangle(points, zBuffer, framebuffer, width, height,
+            Vec3f(rand()%255, rand()%255, rand()%255)
+        );
+    }
 
     // generating file
     writeInFile(framebuffer, width, height);

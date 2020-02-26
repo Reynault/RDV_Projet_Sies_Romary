@@ -6,6 +6,7 @@
 #define RDV_PROJET_SIES_ROMARY_RASTERIZING_H
 
 #include <iostream>
+#include <limits>
 #include "model.cpp"
 const Vec3f WHITE = Vec3f(1, 1, 1);
 const Vec3f BLACK = Vec3f(0, 0, 0);
