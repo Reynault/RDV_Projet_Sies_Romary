@@ -11,4 +11,4 @@ file(GLOB SOURCES
         )
 
 add_executable(RDV_Projet_Sies_Romary
-        src/rasterizing.cpp src/rasterizing.h)
+        src/rasterizing.cpp src/rasterizing.h src/geometry.cpp)

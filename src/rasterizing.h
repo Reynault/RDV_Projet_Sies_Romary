@@ -8,6 +8,8 @@
 #include <iostream>
 #include <limits>
 #include "model.cpp"
+#include "geometry.h"
+
 const Vec3f WHITE = Vec3f(1, 1, 1);
 const Vec3f BLACK = Vec3f(0, 0, 0);
 const Vec3f RED = Vec3f(1, 0, 0);
