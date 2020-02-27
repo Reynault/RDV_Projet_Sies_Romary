@@ -213,7 +213,7 @@ void rasterizeTriangle(Vec3f points[], std::vector<float> &zBuffer,
  */
 void writeInFile(std::vector<Vec3f> &framebuffer, int width, int height){
     std::ofstream ofs;
-    ofs.open("../images/out7.ppm", std::ios::binary);
+    ofs.open("../images/out9.ppm", std::ios::binary);
     ofs << "P6\n" << width << " " << height << "\n255\n";
     for(size_t i = 0; i < height*width; i++){
         Vec3f &c = framebuffer[i];
@@ -281,13 +281,17 @@ void render(){
 
     Vec3f camera = Vec3f(0, 0, 2); // camera.z used in the projection matrix, != 0
     Vec3f orient = Vec3f(0, 0, 5);
-    Vec3f ambient_light_direction = Vec3f( 1, 1, 1);
+    Vec3f ambient_light_direction = Vec3f( 0, 0, -1);
 
     Matrix VP = viewport(width/8, height/8, width*3/4, height*3/4, depth); // getting viewport
     Matrix P  = projection(camera.z);// getting perspective matrix
 
     // drawing things here
     Vec3f points[nbPoints];
+    float illumination;
+    Vec3f N;
+    Vec3f edge1;
+    Vec3f edge2;
     Vec3f point;
     #pragma omp parallel for
     for(int i = 0; i < diablo.nfaces(); i++){   // fetching diablo's mesh
@@ -296,10 +300,19 @@ void render(){
             points[j] = m2v(VP * P * v2m(point));
             points[j].y = height - points[j].y; // reverse diablo
         }
+        edge1 = points[1] - points[0];
+        edge2 = points[2] - points[0];
 
-        rasterizeTriangle(points, zBuffer, framebuffer, width, height,
-            Vec3f(rand()%255, rand()%255, rand()%255)
-        );
+        // compute triangle normal
+        N = (edge1^edge2).normalize();
+
+        // compute illumination for the triangle
+        illumination = N*ambient_light_direction;
+        // checking if > 0 (if it is, then the normal was toward us)
+        if(illumination > 0){
+            rasterizeTriangle(points, zBuffer, framebuffer, width, height,
+                              Vec3f(illumination, illumination, illumination));
+        }
     }
 
     // generating file
