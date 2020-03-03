@@ -3,18 +3,32 @@
  * Doc used for the development of this project: https://github.com/ssloy/tinyrenderer/wiki/Lesson-0-getting-started
  */
 
+Vec3f lamp = Vec3f(0, 0, 1);
+Model diablo = Model("../res/diablo3_pose.obj");
+TGAImage texture = TGAImage();
+
+const int fov = 90;
+const int width = 2048;
+const int height = 1536;
+const int depth = 255;
+const int nbPoints = 3;
+
+std::vector<float> zBuffer(width*height);
+std::vector<Vec3f> framebuffer(width*height);
+Vec3f camera = Vec3f(0, 0, 2); // camera.z used in the projection matrix, != 0
+
 /*
  * checking if the point is in a certain range
  */
-bool inRange(int x, int y, int width, int height){
+bool inRange(int x, int y){
     return x >= 0 && y >= 0 && x < width && y < height;
 }
 
 /*
  *  drawing a line using bresenham algorithm
  */
-void drawLine(int x1, int y1, int x2, int y2, std::vector<Vec3f> &framebuffer, int width, int height, const Vec3f &color){
-    if(inRange(x1, y1, width, height) && inRange(x2, y2, width, height)) {
+void drawLine(int x1, int y1, int x2, int y2, const Vec3f &color){
+    if(inRange(x1, y1) && inRange(x2, y2)) {
         int dx, dy, error, offset, shift, relocate;
         bool steep = false;
         if (std::abs(x2 - x1) < std::abs(y2 - y1)) {
@@ -46,23 +60,19 @@ void drawLine(int x1, int y1, int x2, int y2, std::vector<Vec3f> &framebuffer, i
 /*
  * drawing a polygon as a mesh
  */
-void drawPolygonMesh(Vec3f points[], int nbLines, std::vector<Vec3f> &framebuffer,
-        int width, int height, const Vec3f &color){
+void drawPolygonMesh(Vec3f points[], int nbLines, const Vec3f &color){
     for(int i = 0; i < nbLines-1; i++){ // drawing every lines
-        drawLine(points[i].x, points[i].y, points[i+1].x, points[i+1].y,
-                framebuffer, width, height, color);
+        drawLine(points[i].x, points[i].y, points[i+1].x, points[i+1].y, color);
     }
     if(nbLines > 1){    // drawing last one
-        drawLine(points[0].x, points[0].y, points[nbLines-1].x, points[nbLines-1].y,
-                framebuffer, width, height, color);
+        drawLine(points[0].x, points[0].y, points[nbLines-1].x, points[nbLines-1].y, color);
     }
 }
 
 /*
  * drawing a triangle using line sweeping algorithm (first approach)
  */
-void sweepingTriangle(Vec3f points[], std::vector<float> &zBuffer,
-        std::vector<Vec3f> &framebuffer, int width, int height, const Vec3f &color){
+void sweepingTriangle(Vec3f points[], const Vec3f &color){
     Vec3f A, B, C, AB, BC, AC, pAC, pAB, pBC;
     A = points[0];
     B = points[1];
@@ -106,10 +116,10 @@ void sweepingTriangle(Vec3f points[], std::vector<float> &zBuffer,
             (A.x < B.x) ? pAB.x = A.x + (AB.x * i) / AB.y : pAB.x = A.x - (AB.x * i) / AB.y;
             pAB.y = pAC.y;
 
-            drawLine(pAB.x, pAB.y, pAC.x, pAC.y, framebuffer, width, height, color);
+            drawLine(pAB.x, pAB.y, pAC.x, pAC.y, color);
         }
     }else{
-        drawLine(A.x, A.y, B.x, B.y, framebuffer, width, height, color);
+        drawLine(A.x, A.y, B.x, B.y, color);
     }
 
 
@@ -122,19 +132,19 @@ void sweepingTriangle(Vec3f points[], std::vector<float> &zBuffer,
             (B.x < C.x ) ? pBC.x = B.x + (BC.x * (i-AB.y)) / BC.y : pBC.x = B.x - (BC.x * (i-AB.y)) / BC.y;
             pBC.y = pAC.y;
 
-            drawLine(pBC.x, pBC.y, pAC.x, pAC.y, framebuffer, width, height, color);
+            drawLine(pBC.x, pBC.y, pAC.x, pAC.y, color);
         }
     }else{
-        drawLine(B.x, B.y, C.x, C.y, framebuffer, width, height, color);
+        drawLine(B.x, B.y, C.x, C.y, color);
     }
 
-    drawLine(A.x, A.y, B.x, B.y, framebuffer, width, height, color);
-    drawLine(A.x, A.y, C.x, C.y, framebuffer, width, height, color);
-    drawLine(B.x, B.y, C.x, C.y, framebuffer, width, height, color);
+    drawLine(A.x, A.y, B.x, B.y, color);
+    drawLine(A.x, A.y, C.x, C.y, color);
+    drawLine(B.x, B.y, C.x, C.y, color);
 
 }
 
-Vec3f getBarycentricCoordinates(const Vec3f AB, const Vec3f AC, const Vec3f PA){
+Vec3f getBarycentricCoordinates(const Vec3f &AB, const Vec3f &AC, const Vec3f &PA){
     Vec3f vecX, vecY, coor;
     vecX = Vec3f(AB.x, AC.x, PA.x);
     vecY = Vec3f(AB.y, AC.y, PA.y);
@@ -146,24 +156,43 @@ Vec3f getBarycentricCoordinates(const Vec3f AB, const Vec3f AC, const Vec3f PA){
  * method that will update the z-buffer by comparing the current value of z
  * with the stocked one.
  */
-void updateZBuffer(int x, int y, Vec3f points[], const Vec3f norms[], Vec3f text[], const Vec3f &barycenter, std::vector<float> &zBuffer,
-        std::vector<Vec3f> &framebuffer, int width, int height, const Vec3f &color, const Vec3f &lamp){
+void updateZBuffer(int x, int y, Vec3f points[], Vec2f text[], const Vec3f norms[], const Vec3f &barycenter){
     // bi-linear interpolation to retrieve Z
     float z = points[0].z * barycenter.x + points[1].z * barycenter.y + points[2].z * barycenter.z;
+
+    // getting norm of the current point using bi-linear interpolation between norms of vertices
     Vec3f interNorm = (norms[0] * barycenter.x + norms[1] * barycenter.y + norms[2] * barycenter.z).normalize();
     float illuminate = interNorm*lamp;
-    // checking if z in z-buffer is <
-    if(z >= zBuffer[y*width + x] && illuminate > 0){
+
+    // retrieve position in the texture
+
+    float xText, yText;
+    xText = text[0].x * barycenter.x + text[1].x * barycenter.y + text[2].x * barycenter.z;
+    yText = text[0].y * barycenter.x + text[1].y * barycenter.y + text[2].y * barycenter.z;
+    xText *= (float)(texture.get_width());
+    yText = (yText) * (float)(texture.get_height());
+    TGAColor textureForThePoint = texture.get((int)xText, (int)(yText));
+
+    //    std::cout << (int) textureForThePoint.bgra[2] << std::endl;
+    //    std::cout << (int) textureForThePoint.bgra[1] << std::endl;
+    //    std::cout << (int) textureForThePoint.bgra[0] << std::endl;
+//        std::cout << illuminate << std::endl;
+
+    // checking z-buffer
+    if(z >= zBuffer[y*width + x]){
         zBuffer[y*width + x] = z;
-        framebuffer[(height - 1 - y)*width + x] = Vec3f(illuminate, illuminate, illuminate);
+        framebuffer[(height - 1 - y)*width + x] = Vec3f(
+                ((float)textureForThePoint.bgra[2]/255)*illuminate,
+                ((float)textureForThePoint.bgra[1]/255)*illuminate,
+                ((float)textureForThePoint.bgra[0]/255)*illuminate
+                );
     }
 }
 
 /*
  * drawing a triangle using barycentric coordinates  algorithm (using bounding box)
  */
-void rasterizeTriangle(Vec3f points[], const Vec3f norms[], Vec3f text[], std::vector<float> &zBuffer,
-        std::vector<Vec3f> &framebuffer, int width, int height, const Vec3f &color, const Vec3f &lamp) {
+void rasterizeTriangle(Vec3f points[], const Vec3f norms[], Vec2f text[]) {
     Vec3f A, B, C, P, AB, AC, PA, barycenter;
     int minX, maxX, minY, maxY;
 
@@ -201,8 +230,7 @@ void rasterizeTriangle(Vec3f points[], const Vec3f norms[], Vec3f text[], std::v
             barycenter = getBarycentricCoordinates(AB, AC, PA);
             // checking if inside triangle and update z-buffer
             if(barycenter.x > 0 && barycenter.y > 0 && barycenter.z > 0){
-                updateZBuffer(x, y, points, norms, text, barycenter,
-                        zBuffer, framebuffer, width, height, color, lamp);
+                updateZBuffer(x, y, points, text, norms, barycenter);
             }
         }
     }
@@ -211,16 +239,16 @@ void rasterizeTriangle(Vec3f points[], const Vec3f norms[], Vec3f text[], std::v
 /*
  * writing a ppm image, code from: https://github.com/ssloy/tinyraytracer
  */
-void writeInFile(std::vector<Vec3f> &framebuffer, int width, int height){
+void writeInFile(std::vector<Vec3f> &image, int w, int h){
     std::ofstream ofs;
-    ofs.open("../images/out12.ppm", std::ios::binary);
-    ofs << "P6\n" << width << " " << height << "\n255\n";
-    for(size_t i = 0; i < height*width; i++){
-        Vec3f &c = framebuffer[i];
+    ofs.open("../images/out16.ppm", std::ios::binary);
+    ofs << "P6\n" << w << " " << h << "\n255\n";
+    for(size_t i = 0; i < h * w; i++){
+        Vec3f &c = image[i];
         float max = std::max(c[0], std::max(c[1], c[2]));
         if (max>1) c = c*(1.f/max);
         for (size_t j = 0; j<3; j++) {
-            ofs << (char)(255 * std::max(0.f, std::min(1.f, framebuffer[i][j])));
+            ofs << (char)(255 * std::max(0.f, std::min(1.f, image[i][j])));
         }
     }
     ofs.close();
@@ -229,7 +257,7 @@ void writeInFile(std::vector<Vec3f> &framebuffer, int width, int height){
 /*
  * creating viewport matrix, code from https://github.com/ssloy/tinyrenderer
  */
-Matrix viewport(float x, float y, float w, float h, float depth) {
+Matrix viewport(float x, float y, float w, float h) {
     Matrix Viewport = Matrix::identity(4);
     Viewport[0][3] = x+w/2.f;
     Viewport[1][3] = y+h/2.f;
@@ -266,25 +294,11 @@ Matrix v2m(const Vec3f &v) {
 }
 
 void render(){
-    Model diablo = Model("../res/diablo3_pose.obj");
-    Model textureDiablo = Model("../res/diablo3_pose.obj");
+    texture.read_tga_file("../res/diablo3_pose_diffuse.tga"); // getting texture
+    texture.flip_vertically();
+    std::fill(zBuffer.begin(), zBuffer.end(), std::numeric_limits<float>::lowest()); // filling z-buffer
 
-    const int fov = 90;
-    const int width = 1280;
-    const int height = 720;
-    const int depth = 255;
-    const int nbPoints = 3;
-
-    std::vector<Vec3f> framebuffer(width*height);
-
-    std::vector<float> zBuffer(width*height);
-    std::fill(zBuffer.begin(), zBuffer.end(), std::numeric_limits<float>::lowest());
-
-    Vec3f camera = Vec3f(0, 0, 2); // camera.z used in the projection matrix, != 0
-    Vec3f orient = Vec3f(0, 0, 5);
-    Vec3f lamp = Vec3f(0, 0, 1);
-
-    Matrix VP = viewport(width/8, height/8, width*3/4, height*3/4, depth); // getting viewport
+    Matrix VP = viewport((float)width/8, (float)height/8, (float)width*3/4, (float)height*3/4); // getting viewport
     Matrix P  = projection(camera.z);// getting perspective matrix
 
     // drawing things here
@@ -298,12 +312,13 @@ void render(){
         }
 
         Vec3f norms[nbPoints];
-        Vec3f text[nbPoints];
-        // retrieving normal for each vertices
+        Vec2f text[nbPoints];
+        // retrieving normal for each vertices, and textures position
         for(int k = 0 ; k < nbPoints; k++){
             norms[k] = diablo.normal(i, k);
+            text[k] = diablo.uv(i, k);
         }
-        rasterizeTriangle(points, norms, text, zBuffer, framebuffer, width, height, WHITE, lamp);
+        rasterizeTriangle(points, norms, text);
     }
 
     // generating file

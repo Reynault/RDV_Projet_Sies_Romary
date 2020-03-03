@@ -9,6 +9,7 @@
 #include <limits>
 #include "model.cpp"
 #include "geometry.h"
+#include "tgaimage.h"
 
 const Vec3f WHITE = Vec3f(1, 1, 1);
 const Vec3f BLACK = Vec3f(0, 0, 0);
