@@ -13,10 +13,6 @@ const int height = 1536;
 const int depth = 255;
 const int nbPoints = 3;
 
-std::vector<float> zBuffer(width*height);
-std::vector<Vec3f> framebuffer(width*height);
-Vec3f camera = Vec3f(0, 0, 2); // camera.z used in the projection matrix, != 0
-
 /*
  * checking if the point is in a certain range
  */
@@ -24,124 +20,30 @@ bool inRange(int x, int y){
     return x >= 0 && y >= 0 && x < width && y < height;
 }
 
-/*
- *  drawing a line using bresenham algorithm
- */
-void drawLine(int x1, int y1, int x2, int y2, const Vec3f &color){
-    if(inRange(x1, y1) && inRange(x2, y2)) {
-        int dx, dy, error, offset, shift, relocate;
-        bool steep = false;
-        if (std::abs(x2 - x1) < std::abs(y2 - y1)) {
-            std::swap(x1, y1);
-            std::swap(x2, y2);
-            steep = true;
-        }
-        if (x1 > x2) {
-            std::swap(x1, x2);
-            std::swap(y1, y2);
-        }
-        dx = x2 - x1;
-        dy = y2 - y1;
-        offset = std::abs(dy) * 2;
-        error = 0;
-        relocate = dx * 2;
-        shift = (y1 > y2) ? -1 : 1;
-        int y = y1;
-        for (int x = x1; x <= x2; x++) {
-            (steep) ? framebuffer[y + x * width] = color : framebuffer[x + y * width] = color;
-            if ((error = error + offset) > dx) {
-                y += shift;
-                error -= relocate;
-            }
-        }
+Matrix lookat(Vec3f eye, Vec3f center, Vec3f up) {
+    Vec3f z = (eye-center).normalize();
+    Vec3f x = (up^z).normalize();
+    Vec3f y = (z^x).normalize();
+    Matrix ret = Matrix::identity(4);
+    for (int i=0; i<3; i++) {
+        ret[0][i] = x[i];
+        ret[1][i] = y[i];
+        ret[2][i] = z[i];
+        ret[i][3] = -center[i];
     }
+    return ret;
 }
 
-/*
- * drawing a polygon as a mesh
- */
-void drawPolygonMesh(Vec3f points[], int nbLines, const Vec3f &color){
-    for(int i = 0; i < nbLines-1; i++){ // drawing every lines
-        drawLine(points[i].x, points[i].y, points[i+1].x, points[i+1].y, color);
-    }
-    if(nbLines > 1){    // drawing last one
-        drawLine(points[0].x, points[0].y, points[nbLines-1].x, points[nbLines-1].y, color);
-    }
-}
+Matrix viewport(int x, int y, int w, int h) {
+    Matrix m = Matrix::identity(4);
+    m[0][3] = x+w/2.f;
+    m[1][3] = y+h/2.f;
+    m[2][3] = depth/2.f;
 
-/*
- * drawing a triangle using line sweeping algorithm (first approach)
- */
-void sweepingTriangle(Vec3f points[], const Vec3f &color){
-    Vec3f A, B, C, AB, BC, AC, pAC, pAB, pBC;
-    A = points[0];
-    B = points[1];
-    C = points[2];
-
-    // sort vertices of the triangle by their y-coordinates;
-    if(A.y > B.y) std::swap(A, B);
-    if(B.y > C.y) std::swap(B, C);
-    if(A.y > B.y) std::swap(A, B);
-
-    // getting vectors AB, BC, AC
-    AB = Vec3f(
-            std::abs(B.x - A.x),
-            std::abs(B.y - A.y),
-            std::abs(B.z - A.z)
-    );
-    BC = Vec3f(
-            std::abs(B.x - C.x),
-            std::abs(B.y - C.y),
-            std::abs(B.z - C.z)
-    );
-    AC = Vec3f(
-            std::abs(C.x - A.x),
-            std::abs(C.y - A.y),
-            std::abs(C.z - A.z)
-    );
-
-    // getting points of the current line
-    pAC = A;
-    pAB = A;
-    pBC = B;
-
-    // drawing upper part of the triangle
-    if(AB.y > 0){
-        for (float i = 0; i < AB.y; i++) {
-            // linear interpolation to retrieve x position of pAC
-            // (depending on the direction of the segment)
-            (A.x < C.x ) ? pAC.x = A.x + (AC.x * i) / AC.y : pAC.x = A.x - (AC.x * i) / AC.y ;
-            pAC.y = A.y + i;
-
-            (A.x < B.x) ? pAB.x = A.x + (AB.x * i) / AB.y : pAB.x = A.x - (AB.x * i) / AB.y;
-            pAB.y = pAC.y;
-
-            drawLine(pAB.x, pAB.y, pAC.x, pAC.y, color);
-        }
-    }else{
-        drawLine(A.x, A.y, B.x, B.y, color);
-    }
-
-
-    // drawing lower part of the triangle
-    if(BC.y > 0){
-        for(float i = AB.y; i < AC.y; i++){
-            (A.x < C.x ) ? pAC.x = A.x + (AC.x * i) / AC.y : pAC.x = A.x - (AC.x * i) / AC.y ;
-            pAC.y = A.y + i;
-
-            (B.x < C.x ) ? pBC.x = B.x + (BC.x * (i-AB.y)) / BC.y : pBC.x = B.x - (BC.x * (i-AB.y)) / BC.y;
-            pBC.y = pAC.y;
-
-            drawLine(pBC.x, pBC.y, pAC.x, pAC.y, color);
-        }
-    }else{
-        drawLine(B.x, B.y, C.x, C.y, color);
-    }
-
-    drawLine(A.x, A.y, B.x, B.y, color);
-    drawLine(A.x, A.y, C.x, C.y, color);
-    drawLine(B.x, B.y, C.x, C.y, color);
-
+    m[0][0] = w/2.f;
+    m[1][1] = h/2.f;
+    m[2][2] = depth/2.f;
+    return m;
 }
 
 Vec3f getBarycentricCoordinates(const Vec3f &AB, const Vec3f &AC, const Vec3f &PA){
@@ -156,7 +58,8 @@ Vec3f getBarycentricCoordinates(const Vec3f &AB, const Vec3f &AC, const Vec3f &P
  * method that will update the z-buffer by comparing the current value of z
  * with the stocked one.
  */
-void updateZBuffer(int x, int y, Vec3f points[], Vec2f text[], const Vec3f norms[], const Vec3f &barycenter){
+void updateZBuffer(int x, int y, Vec3f points[], Vec2f text[], const Vec3f norms[], const Vec3f &barycenter,
+                   std::vector<Vec3f> &framebuffer, std::vector<float> &zBuffer) {
     // bi-linear interpolation to retrieve Z
     float z = points[0].z * barycenter.x + points[1].z * barycenter.y + points[2].z * barycenter.z;
 
@@ -192,7 +95,8 @@ void updateZBuffer(int x, int y, Vec3f points[], Vec2f text[], const Vec3f norms
 /*
  * drawing a triangle using barycentric coordinates  algorithm (using bounding box)
  */
-void rasterizeTriangle(Vec3f points[], const Vec3f norms[], Vec2f text[]) {
+void rasterizeTriangle(Vec3f points[], const Vec3f norms[], Vec2f text[], std::vector<Vec3f> &framebuffer,
+                       std::vector<float> &zBuffer) {
     Vec3f A, B, C, P, AB, AC, PA, barycenter;
     int minX, maxX, minY, maxY;
 
@@ -230,7 +134,7 @@ void rasterizeTriangle(Vec3f points[], const Vec3f norms[], Vec2f text[]) {
             barycenter = getBarycentricCoordinates(AB, AC, PA);
             // checking if inside triangle and update z-buffer
             if(barycenter.x > 0 && barycenter.y > 0 && barycenter.z > 0){
-                updateZBuffer(x, y, points, text, norms, barycenter);
+                updateZBuffer(x, y, points, text, norms, barycenter, framebuffer, zBuffer);
             }
         }
     }
@@ -239,9 +143,9 @@ void rasterizeTriangle(Vec3f points[], const Vec3f norms[], Vec2f text[]) {
 /*
  * writing a ppm image, code from: https://github.com/ssloy/tinyraytracer
  */
-void writeInFile(std::vector<Vec3f> &image, int w, int h){
+void writeInFile(std::vector<Vec3f> &image, int w, int h, std::string name){
     std::ofstream ofs;
-    ofs.open("../images/out16.ppm", std::ios::binary);
+    ofs.open("../images/out" + name + ".ppm", std::ios::binary);
     ofs << "P6\n" << w << " " << h << "\n255\n";
     for(size_t i = 0; i < h * w; i++){
         Vec3f &c = image[i];
@@ -294,21 +198,55 @@ Matrix v2m(const Vec3f &v) {
 }
 
 void render(){
+    //std::vector<float> zBuffer(width*height);
+    //Vec3f camera = Vec3f(0, 0, 2); // camera.z used in the projection matrix, != 0
+
     texture.read_tga_file("../res/diablo3_pose_diffuse.tga"); // getting texture
     texture.flip_vertically();
-    std::fill(zBuffer.begin(), zBuffer.end(), std::numeric_limits<float>::lowest()); // filling z-buffer
+    //std::fill(zBuffer.begin(), zBuffer.end(), std::numeric_limits<float>::lowest()); // filling z-buffer
 
-    Matrix VP = viewport((float)width/8, (float)height/8, (float)width*3/4, (float)height*3/4); // getting viewport
-    Matrix P  = projection(camera.z);// getting perspective matrix
+    std::vector<Vec3f> framebuffer(width*height); //used for the fusion
+    std::vector<Vec3f> framebufferLeftEye(width*height); //image used for left eye
+    std::vector<Vec3f> framebufferRightEye(width*height);//image used for right eye
+
+    //Matrix VP = viewport((float)width/8, (float)height/8, (float)width*3/4, (float)height*3/4); // getting viewport
+    //Matrix P  = projection(camera.z);// getting perspective matrix
+
+
+    std::vector<float> zBufferLeft(width*height);
+    std::fill(zBufferLeft.begin(), zBufferLeft.end(), std::numeric_limits<float>::lowest());
+    std::vector<float> zBufferRight(width*height);
+    std::fill(zBufferRight.begin(), zBufferRight.end(), std::numeric_limits<float>::lowest());
+
+    Vec3f center(0,0,0);
+
+    Vec3f leftEye(-0.1, 0, 2.5);
+    Vec3f rightEye(0.1, 0, 2.5);
+    Matrix ModelViewLeft = lookat(leftEye, center, Vec3f(0,1,0));
+    Matrix ModelViewRight = lookat(rightEye, center, Vec3f(0,1,0));
+    Matrix ViewPort = viewport(width/8, height/8, width*3/4, height*3/4);
+
+    Matrix ProjectionLeft = projection((leftEye - center).norm());
+    Matrix ProjectionRight = projection((rightEye - center).norm());
+
+    Matrix TotalTransformLeft = ViewPort * ProjectionLeft * ModelViewLeft;
+    Matrix TotalTransformRight = ViewPort * ProjectionRight * ModelViewRight;
+
 
     // drawing things here
-    Vec3f points[nbPoints];
-    Vec3f point;
+    Vec3f pointsLeft[nbPoints];
+    Vec3f pointsRight[nbPoints];
+    Vec3f pointLeft;
+    Vec3f pointRight;
+
     #pragma omp parallel for
     for(int i = 0; i < diablo.nfaces(); i++){   // fetching diablo's mesh
         for(int j = 0; j < nbPoints; j++){
-            point = diablo.point(diablo.vert(i, j));
-            points[j] = m2v(VP * P * v2m(point));
+            pointLeft = diablo.point(diablo.vert(i, j));
+            pointRight = diablo.point(diablo.vert(i, j));
+
+            pointsLeft[j] = m2v(TotalTransformLeft * v2m(pointLeft));
+            pointsRight[j] = m2v(TotalTransformRight * v2m(pointRight));
         }
 
         Vec3f norms[nbPoints];
@@ -318,11 +256,34 @@ void render(){
             norms[k] = diablo.normal(i, k);
             text[k] = diablo.uv(i, k);
         }
-        rasterizeTriangle(points, norms, text);
+        rasterizeTriangle(pointsLeft, norms, text, framebufferLeftEye, zBufferLeft);
+        rasterizeTriangle(pointsRight, norms, text, framebufferRightEye, zBufferRight);
     }
 
     // generating file
-    writeInFile(framebuffer, width, height);
+    writeInFile(framebufferLeftEye, width, height, "Left");
+    writeInFile(framebufferRightEye, width, height, "Right");
+
+    for (size_t i = 0; i < height * width; ++i) {
+        Vec3f &c = framebufferLeftEye[i];
+        Vec3f &cbis = framebufferRightEye[i];
+        Vec3f res;
+        float max = std::max(c[0], std::max(c[1], c[2]));
+        if (max > 1) c = c * (1. / max);
+        float maxbis = std::max(cbis[0], std::max(cbis[1], cbis[2]));
+        if (maxbis > 1) cbis = cbis * (1. / maxbis);
+
+        res = Vec3f((c.x + c.z) / 2., (c.y + cbis.y)/2., (cbis.x + cbis.z) / 2.);
+
+        framebuffer[i] = res ;
+
+    }
+
+
+    writeInFile(framebuffer, width, height, "17");
+
+
+
 }
 
 int main() {
