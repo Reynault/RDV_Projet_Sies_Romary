@@ -125,6 +125,7 @@ le centre et le vecteur up indiquant la rotation. Voici deux images obtenues par
 
 Nous avions oublié d'initialiser un autre z-buffer, voici le résultat pour chaque oeil :
 ![Diablo texturé](images/png/outLeft_one_zBuffer.png)
+
 ![Diablo texturé](images/png/outright_one_zBuffer.png)
 
 La dernière étape a été d'ajouter l'effet anaglyphe. Il y avait plusieurs façons de le réaliser,
